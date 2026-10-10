@@ -2,7 +2,7 @@
 ================================================================================
 TEAM EDITH - AIR MOUSE GROUND CONTROL STATION (GCS)
 Autonomous GPS-Denied Indoor Search, Mapping & Survivor Localization Challenge
-PS2: NIDAR AirMouse Challenge
+PS2: NIDAR AirMouse Challenge | Track 1
 ================================================================================
 """
 
@@ -12,6 +12,8 @@ import math
 import time
 import random
 import threading
+import os
+import sys
 
 # Platform audio support
 try:
@@ -22,18 +24,18 @@ except ImportError:
 
 
 # ==============================================================================
-# COLOR PALETTE & AESTHETIC CONFIGURATION (Dark Navy Blue Aerospace Theme)
+# COLOR PALETTE & AESTHETICS (Dark Navy Aerospace Theme - Exact Locked Layout)
 # ==============================================================================
 COLOR_BG_ROOT          = "#070B16"  # Deepest tactical space navy
 COLOR_PANEL_BG         = "#0D1424"  # Dark navy container cards
 COLOR_PANEL_BORDER     = "#1C2740"  # Structural card borders
 COLOR_HEADER_BG        = "#0A1020"  # Top app bar background
 COLOR_CARD_HEADER_BG   = "#131E35"  # Highlighted tab header bar background
-COLOR_CANVAS_BLACK     = "#000000"  # Pure pitch black for SLAM canvas
+COLOR_CANVAS_BLACK     = "#000000"  # Pitch black for SLAM & Video
 
 # Accent Palette
 COLOR_CYAN             = "#00F2FE"  # Primary laser & trajectory accent
-COLOR_ORANGE           = "#FF6B00"  # Safety hazard orange (targets, warnings)
+COLOR_ORANGE           = "#FF6B00"  # Hazard orange (targets, warnings)
 COLOR_GREEN            = "#10B981"  # Operational status green
 COLOR_RED              = "#EF4444"  # Emergency abort red
 COLOR_AMBER            = "#F59E0B"  # Searching / caution amber
@@ -49,12 +51,14 @@ class AudioAlertSystem:
     @staticmethod
     def play_sonar_chirp():
         """Plays high-frequency tactical sonar pulse (880Hz -> 1200Hz) when survivor located."""
-        if not HAS_WINSOUND:
-            return
         def _beep():
             try:
-                winsound.Beep(880, 80)
-                winsound.Beep(1200, 120)
+                if HAS_WINSOUND:
+                    winsound.Beep(880, 80)
+                    winsound.Beep(1200, 120)
+                else:
+                    sys.stdout.write('\a')
+                    sys.stdout.flush()
             except Exception:
                 pass
         threading.Thread(target=_beep, daemon=True).start()
@@ -62,15 +66,19 @@ class AudioAlertSystem:
     @staticmethod
     def play_victory_alarm():
         """Distinct 3-tone victory chime on 6th target acquisition."""
-        if not HAS_WINSOUND:
-            return
         def _chime():
             try:
-                winsound.Beep(988, 120)
-                time.sleep(0.05)
-                winsound.Beep(1175, 120)
-                time.sleep(0.05)
-                winsound.Beep(1568, 350)
+                if HAS_WINSOUND:
+                    winsound.Beep(988, 120)
+                    time.sleep(0.05)
+                    winsound.Beep(1175, 120)
+                    time.sleep(0.05)
+                    winsound.Beep(1568, 350)
+                else:
+                    for _ in range(3):
+                        sys.stdout.write('\a')
+                        sys.stdout.flush()
+                        time.sleep(0.1)
             except Exception:
                 pass
         threading.Thread(target=_chime, daemon=True).start()
@@ -83,9 +91,12 @@ class TeamEdithAirMouseGCS:
     def __init__(self, root):
         self.root = root
         self.root.title("TEAM EDITH | AIR MOUSE GCS - Autonomous Aerospace")
-        self.root.geometry("1480x880")
-        self.root.minsize(1280, 760)
+        self.root.geometry("1366x768")
+        self.root.minsize(1200, 720)
         self.root.configure(bg=COLOR_BG_ROOT)
+
+        # Base Directory for Assets
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
 
         # Mission State
         self.is_mission_active = False
@@ -94,420 +105,542 @@ class TeamEdithAirMouseGCS:
         self.elapsed_time = 0.0
 
         # Drone State
-        self.drone_armed = True
         self.altitude = 1.20
         self.pitch = 1.8
         self.roll = -0.4
         self.yaw = 198.0
-        self.speed = 0.82
-        self.distance_traversed = 0.0
-        self.exploration_percent = 12.0
+        self.battery_pct = 88
+        self.battery_voltage = 22.8
+        self.distance_traversed = 42.8
+        self.exploration_percent = 74.0
 
-        # Arena Metric Grid: 15m x 15m
-        self.grid_cols = [chr(c) for c in range(ord('A'), ord('P'))]  # A - O (15)
-        self.grid_rows = list(range(1, 16))                          # 1 - 15
-
-        # Survivors State (T1 - T6)
-        self.survivors = [
-            {"id": "T1", "status": "SEARCHING", "grid": "--", "conf": 0, "located": False},
-            {"id": "T2", "status": "SEARCHING", "grid": "--", "conf": 0, "located": False},
-            {"id": "T3", "status": "SEARCHING", "grid": "--", "conf": 0, "located": False},
-            {"id": "T4", "status": "SEARCHING", "grid": "--", "conf": 0, "located": False},
-            {"id": "T5", "status": "SEARCHING", "grid": "--", "conf": 0, "located": False},
-            {"id": "T6", "status": "SEARCHING", "grid": "--", "conf": 0, "located": False},
+        # ----------------------------------------------------------------------
+        # CORRIDOR WAYPOINTS (100% COLLISION-FREE HALLWAY CENTERLINE)
+        # Follows the exact indoor hallway corridor between inner and outer walls
+        # ----------------------------------------------------------------------
+        self.corridor_waypoints = [
+            (255, 52),   # Top Entrance near E-13
+            (255, 90),   # Moving into North Junction
+            (290, 104),  # Northern Hallway Start
+            (380, 105),  # Northern Hallway Mid
+            (500, 107),  # Northern Hallway East End
+            (555, 128),  # North-East Corner Turn
+            (566, 175),  # Eastern Hallway Center
+            (568, 220),  # Eastern Hallway Southward
+            (550, 255),  # South-East Corner Turn
+            (500, 258),  # Southern Hallway East
+            (410, 248),  # Southern Hallway Center
+            (310, 238),  # Southern Hallway West
+            (235, 240),  # South-West Corner Turn
+            (210, 220),  # Western Hallway Upwards
+            (205, 160),  # Past Entry/Exit LZ & T1 Survivor [C-4]
+            (215, 125),  # Western Hallway North End
+            (235, 105),  # Rejoining Northern Loop
         ]
-        self.survivors_located_count = 0
-
-        # Trajectory Waypoints & Point Cloud Accumulator
-        self.drone_pos = [250, 80]     # Start at Home LZ (G-2 area)
-        self.trajectory_history = [list(self.drone_pos)]
-        self.point_cloud_dots = []     # (x, y, color)
+        self.waypoint_index = 0
+        self.waypoint_t = 0.0  # Interpolation factor [0.0, 1.0]
+        self.drone_pos = list(self.corridor_waypoints[0])
+        self.trajectory_history = []
         self.lidar_angle = 0.0
 
-        # Pre-seed simulated indoor maze walls (LiDAR Point Cloud Scatter)
-        self._init_maze_point_cloud()
+        # Blinking REC dot state
+        self.rec_blink_state = True
+        self.last_blink_time = time.time()
 
-        # Build Interface
+        # Survivors Tracker (T1 to T6)
+        self.survivors = [
+            {"id": "T1", "status": "LOCATED", "grid": "Grid [C-4]", "conf": 94.2, "located": True},
+            {"id": "T2", "status": "SEARCHING...", "grid": "--", "conf": 0.0, "located": False},
+            {"id": "T3", "status": "SEARCHING...", "grid": "--", "conf": 0.0, "located": False},
+            {"id": "T4", "status": "SEARCHING...", "grid": "--", "conf": 0.0, "located": False},
+            {"id": "T5", "status": "SEARCHING...", "grid": "--", "conf": 0.0, "located": False},
+            {"id": "T6", "status": "SEARCHING...", "grid": "--", "conf": 0.0, "located": False},
+        ]
+        self.survivors_located_count = 1
+
+        # Setup GUI Components
         self._build_top_header()
         self._build_main_layout()
-        self._build_bottom_bar()
 
-        # Start periodic tick timers
+        # Load Image Assets
+        self._load_image_assets()
+
+        # Start periodic updates (60 FPS tick)
         self._schedule_updates()
 
     # --------------------------------------------------------------------------
-    # HELPER: TACTICAL HIGHLIGHTED CARD CONTAINER
+    # IMAGE ASSETS LOADER
     # --------------------------------------------------------------------------
-    def _create_tactical_card(self, parent, title, accent_color=COLOR_CYAN, right_badge="···", width=None):
-        """Creates a modern aerospace card container with a prominent highlighted header strip."""
-        card = tk.Frame(parent, bg=COLOR_PANEL_BG, highlightthickness=1, highlightbackground=COLOR_PANEL_BORDER)
-        if width:
-            card.config(width=width)
+    def _load_image_assets(self):
+        """Loads high-res authentic LiDAR SLAM map & IP camera surveillance feed."""
+        # 1. Camera Feed
+        cam_path = os.path.join(self.base_dir, "cam_feed.png")
+        if os.path.exists(cam_path):
+            try:
+                self.cam_photo = tk.PhotoImage(file=cam_path)
+            except Exception as e:
+                print(f"Error loading cam_feed.png: {e}")
+                self.cam_photo = None
+        else:
+            self.cam_photo = None
 
-        # Highlighted Header Bar
-        hdr = tk.Frame(card, bg=COLOR_CARD_HEADER_BG, height=28)
-        hdr.pack(side=tk.TOP, fill=tk.X)
-        hdr.pack_propagate(False)
-
-        # Left Neon Accent Bar
-        accent_bar = tk.Frame(hdr, bg=accent_color, width=4)
-        accent_bar.pack(side=tk.LEFT, fill=tk.Y)
-
-        # Bold Highlighted Title
-        title_lbl = tk.Label(hdr, text=f"  {title.upper()}", font=("Segoe UI", 8, "bold"),
-                             fg=COLOR_TEXT_PRIMARY, bg=COLOR_CARD_HEADER_BG)
-        title_lbl.pack(side=tk.LEFT, padx=2)
-
-        # Right-side Status Tag / Badge
-        badge_lbl = tk.Label(hdr, text=f"{right_badge}  ", font=("Consolas", 8, "bold"),
-                             fg=accent_color, bg=COLOR_CARD_HEADER_BG)
-        badge_lbl.pack(side=tk.RIGHT, padx=4)
-
-        # Thin Header Bottom Divider
-        divider = tk.Frame(card, bg=COLOR_PANEL_BORDER, height=1)
-        divider.pack(side=tk.TOP, fill=tk.X)
-
-        # Body Container
-        body = tk.Frame(card, bg=COLOR_PANEL_BG)
-        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=4, pady=4)
-
-        return card, body
+        # 2. SLAM Map Background
+        slam_path = os.path.join(self.base_dir, "slam_background.png")
+        if os.path.exists(slam_path):
+            try:
+                self.slam_photo = tk.PhotoImage(file=slam_path)
+            except Exception as e:
+                print(f"Error loading slam_background.png: {e}")
+                self.slam_photo = None
+        else:
+            self.slam_photo = None
 
     # --------------------------------------------------------------------------
-    # SIMULATED POINT CLOUD MAZE SETUP
-    # --------------------------------------------------------------------------
-    def _init_maze_point_cloud(self):
-        """Generates realistic laser-scanned wall boundaries using scattered point clusters."""
-        random.seed(42)
-        wall_lines = [
-            ((30, 30), (520, 30)),
-            ((520, 30), (520, 350)),
-            ((520, 350), (30, 350)),
-            ((30, 350), (30, 30)),
-            ((30, 110), (220, 110)),
-            ((270, 110), (430, 110)),
-            ((150, 110), (150, 260)),
-            ((150, 260), (350, 260)),
-            ((350, 260), (350, 110)),
-            ((230, 180), (350, 180)),
-            ((430, 110), (430, 290)),
-            ((350, 290), (480, 290)),
-        ]
-        for (x1, y1), (x2, y2) in wall_lines:
-            length = math.hypot(x2 - x1, y2 - y1)
-            steps = int(length / 2.5)
-            for i in range(steps):
-                t = i / max(1, steps)
-                bx = x1 + t * (x2 - x1)
-                by = y1 + t * (y2 - y1)
-                for _ in range(3):
-                    px = bx + random.uniform(-1.5, 1.5)
-                    py = by + random.uniform(-1.5, 1.5)
-                    color = random.choice(["#E2E8F0", "#94A3B8", "#00F2FE", "#CBD5E1"])
-                    self.point_cloud_dots.append((px, py, color))
-
-    # --------------------------------------------------------------------------
-    # TOP HEADER BAR
+    # 1. TOP HEADER APP BAR
     # --------------------------------------------------------------------------
     def _build_top_header(self):
-        header = tk.Frame(self.root, bg=COLOR_HEADER_BG, height=54, highlightthickness=1, highlightbackground=COLOR_PANEL_BORDER)
-        header.pack(side=tk.TOP, fill=tk.X, padx=8, pady=(6, 4))
-        header.pack_propagate(False)
+        self.header_frame = tk.Frame(self.root, bg=COLOR_HEADER_BG, height=62, bd=0)
+        self.header_frame.pack(side=tk.TOP, fill=tk.X, padx=8, pady=(6, 4))
+        self.header_frame.pack_propagate(False)
 
-        # Left: Branding
-        logo_frame = tk.Frame(header, bg=COLOR_HEADER_BG)
-        logo_frame.pack(side=tk.LEFT, padx=8)
+        # Left: Team Brand Text
+        brand_frame = tk.Frame(self.header_frame, bg=COLOR_HEADER_BG)
+        brand_frame.pack(side=tk.LEFT, padx=12, pady=4)
 
-        brand_lbl = tk.Label(logo_frame, text="TEAM EDITH", font=("Segoe UI", 12, "bold"), fg=COLOR_TEXT_PRIMARY, bg=COLOR_HEADER_BG)
-        brand_lbl.pack(side=tk.LEFT)
-        sub_brand = tk.Label(logo_frame, text=" | AIR MOUSE GCS", font=("Segoe UI", 10), fg=COLOR_CYAN, bg=COLOR_HEADER_BG)
-        sub_brand.pack(side=tk.LEFT)
+        lbl_title = tk.Label(brand_frame, text="TEAM EDITH", font=("Segoe UI", 15, "bold"),
+                             fg=COLOR_TEXT_PRIMARY, bg=COLOR_HEADER_BG)
+        lbl_title.pack(anchor="w")
 
-        # Center-Left: Flight Telemetry Readouts
-        self.header_telemetry = tk.Label(
-            header,
-            text="STATUS: ARMED  |  ALT: 1.20m  |  MISSION TIME: 00:00:00.0",
-            font=("Consolas", 9, "bold"),
+        lbl_sub = tk.Label(brand_frame, text="TACTICAL DRONE GROUND CONTROL STATION",
+                           font=("Segoe UI", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_HEADER_BG)
+        lbl_sub.pack(anchor="w")
+
+        # Center: Telemetry Status & Mode Switch
+        center_frame = tk.Frame(self.header_frame, bg=COLOR_HEADER_BG)
+        center_frame.pack(side=tk.LEFT, expand=True)
+
+        self.lbl_telemetry_status = tk.Label(
+            center_frame,
+            text="STATUS: ARMED  |  ALT: 1.2m  |  MISSION TIME: 00:00:26.4",
+            font=("Consolas", 11, "bold"),
             fg=COLOR_TEXT_PRIMARY,
             bg=COLOR_HEADER_BG
         )
-        self.header_telemetry.pack(side=tk.LEFT, padx=25)
+        self.lbl_telemetry_status.pack(pady=(2, 2))
 
-        # Center-Right: Mode Switcher Pill
-        mode_btn = tk.Button(
-            header,
-            text="[ SIMULATION (ACTIVE) ]  /  [ LIVE HARDWARE ]",
+        # Mode Indicator Pill
+        self.lbl_mode_pill = tk.Label(
+            center_frame,
+            text="[SIMULATION (ACTIVE)]  /  [LIVE HARDWARE]",
             font=("Consolas", 8, "bold"),
-            fg=COLOR_ORANGE,
-            bg="#162035",
-            activebackground="#1E2E4A",
-            activeforeground=COLOR_CYAN,
-            relief=tk.FLAT,
+            fg=COLOR_GREEN,
+            bg="#0E231F",
             padx=10,
-            pady=3,
-            command=self._toggle_mode
+            pady=1,
+            relief=tk.SOLID,
+            bd=1
         )
-        mode_btn.pack(side=tk.LEFT, padx=10)
+        self.lbl_mode_pill.pack()
 
-        # Far Right: Battery & Signal Gauges
-        comm_frame = tk.Frame(header, bg=COLOR_HEADER_BG)
-        comm_frame.pack(side=tk.RIGHT, padx=12)
+        # Right: RF Telemetry & Battery Monitor
+        right_frame = tk.Frame(self.header_frame, bg=COLOR_HEADER_BG)
+        right_frame.pack(side=tk.RIGHT, padx=14, pady=4)
 
-        # 6S Battery Widget
-        batt_box = tk.Frame(comm_frame, bg="#131E34", padx=8, pady=2, highlightthickness=1, highlightbackground=COLOR_PANEL_BORDER)
-        batt_box.pack(side=tk.RIGHT, padx=6)
-        self.batt_lbl = tk.Label(batt_box, text="6S BATT: 22.8V | 88%", font=("Consolas", 8, "bold"), fg=COLOR_CYAN, bg="#131E34")
-        self.batt_lbl.pack(anchor=tk.W)
-        self.cell_lbl = tk.Label(batt_box, text="C1:3.80 C2:3.81 C3:3.80 C4:3.80 C5:3.81 C6:3.80", font=("Consolas", 7), fg=COLOR_GREEN, bg="#131E34")
-        self.cell_lbl.pack(anchor=tk.W)
+        # Wi-Fi Link
+        wifi_box = tk.Frame(right_frame, bg=COLOR_HEADER_BG)
+        wifi_box.pack(side=tk.LEFT, padx=(0, 16))
+        lbl_wifi_icon = tk.Label(wifi_box, text="((•))", font=("Consolas", 9, "bold"), fg=COLOR_CYAN, bg=COLOR_HEADER_BG)
+        lbl_wifi_icon.pack(anchor="center")
+        lbl_wifi_val = tk.Label(wifi_box, text="99% | -42 dBm | Wi-Fi 6", font=("Consolas", 8, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_HEADER_BG)
+        lbl_wifi_val.pack()
 
-        # Cellular Signal 5-Bar Widget
-        signal_box = tk.Frame(comm_frame, bg="#131E34", padx=8, pady=2, highlightthickness=1, highlightbackground=COLOR_PANEL_BORDER)
-        signal_box.pack(side=tk.RIGHT, padx=6)
-        self.signal_lbl = tk.Label(signal_box, text="SIGNAL: 99%  |||||", font=("Consolas", 8, "bold"), fg=COLOR_GREEN, bg="#131E34")
-        self.signal_lbl.pack(anchor=tk.W)
-        self.ping_lbl = tk.Label(signal_box, text="-42 dBm | ~3ms | Wi-Fi 6", font=("Consolas", 7), fg=COLOR_TEXT_SECONDARY, bg="#131E34")
-        self.ping_lbl.pack(anchor=tk.W)
+        # Battery 6S
+        bat_box = tk.Frame(right_frame, bg=COLOR_HEADER_BG)
+        bat_box.pack(side=tk.LEFT)
+        lbl_bat_title = tk.Label(bat_box, text="⚡ 22.8V 6S   88%", font=("Consolas", 9, "bold"), fg=COLOR_GREEN, bg=COLOR_HEADER_BG)
+        lbl_bat_title.pack(anchor="e")
 
-    def _toggle_mode(self):
-        self.is_simulation_mode = not self.is_simulation_mode
-        self._log_event(f"[MODE] Switched to {'SIMULATION' if self.is_simulation_mode else 'LIVE HARDWARE'}")
+        cells_frame = tk.Frame(bat_box, bg=COLOR_HEADER_BG)
+        cells_frame.pack(anchor="e")
+        for i in range(1, 7):
+            c_lbl = tk.Label(cells_frame, text=f"C{i}", font=("Consolas", 6), fg=COLOR_GREEN, bg="#0E2D22", width=3, bd=1, relief=tk.SOLID)
+            c_lbl.pack(side=tk.LEFT, padx=1)
 
     # --------------------------------------------------------------------------
-    # MAIN BODY LAYOUT (Left Column, Center SLAM, Right Column)
+    # 2. MAIN 3-COLUMN & BOTTOM LAYOUT
     # --------------------------------------------------------------------------
     def _build_main_layout(self):
-        main_container = tk.Frame(self.root, bg=COLOR_BG_ROOT)
-        main_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=2)
+        container = tk.Frame(self.root, bg=COLOR_BG_ROOT)
+        container.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
 
-        # ----------------------------------------------------------------------
-        # COLUMN 1: Compass Gauge & 4-System Hardware Health (Highlighted Tabs)
-        # ----------------------------------------------------------------------
-        col1 = tk.Frame(main_container, bg=COLOR_BG_ROOT, width=240)
-        col1.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
-        col1.pack_propagate(False)
+        # Upper Section (Columns)
+        upper_frame = tk.Frame(container, bg=COLOR_BG_ROOT)
+        upper_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # 1. 360° HEADING COMPASS (Highlighted Header)
-        card_compass, body_compass = self._create_tactical_card(
-            col1, title="360° Heading Compass Gauge", accent_color=COLOR_CYAN, right_badge="IMU YAW"
-        )
-        card_compass.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        # Left Column: Heading Gauge & Diagnostics (Width: 260)
+        self.left_col = tk.Frame(upper_frame, bg=COLOR_BG_ROOT, width=260)
+        self.left_col.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
+        self.left_col.pack_propagate(False)
 
-        self.compass_canvas = tk.Canvas(body_compass, width=220, height=140, bg=COLOR_PANEL_BG, highlightthickness=0)
-        self.compass_canvas.pack(pady=2)
-        self._render_compass_dial()
+        # Center Column: 2D Robotic SLAM Canvas (Width: Flexible)
+        self.center_col = tk.Frame(upper_frame, bg=COLOR_BG_ROOT)
+        self.center_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
-        self.attitude_lbl = tk.Label(body_compass, text="Pitch: +1.8°  |  Roll: -0.4°  |  Yaw: 198°",
-                                     font=("Consolas", 8), fg=COLOR_CYAN, bg=COLOR_PANEL_BG)
-        self.attitude_lbl.pack(pady=(0, 4))
+        # Right Column: IP Camera & Survivor Localization Table (Width: 320)
+        self.right_col = tk.Frame(upper_frame, bg=COLOR_BG_ROOT, width=320)
+        self.right_col.pack(side=tk.RIGHT, fill=tk.Y)
+        self.right_col.pack_propagate(False)
 
-        # 2. 4-SYSTEM HARDWARE HEALTH MATRIX (Highlighted Header)
-        card_diag, body_diag = self._create_tactical_card(
-            col1, title="4-System Hardware Health Matrix", accent_color=COLOR_GREEN, right_badge="DIAGNOSTICS"
-        )
-        card_diag.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        # Lower Section (Event Log + Exploration Metrics + Action Buttons)
+        self.bottom_frame = tk.Frame(container, bg=COLOR_BG_ROOT, height=135)
+        self.bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+        self.bottom_frame.pack_propagate(False)
 
-        health_items = [
-            ("MicoAir FC (H743)", "38°C", "MAVLink OK"),
-            ("Jetson Orin Nano", "51°C", "YOLO Active"),
-            ("ESC Motors (4X)", "44°C", "DShot SYNC"),
-            ("Raspberry Pi 4", "46°C", "Comms Link"),
-        ]
-        self.diag_labels = []
-        for name, temp, status in health_items:
-            row = tk.Frame(body_diag, bg=COLOR_PANEL_BG, pady=5)
-            row.pack(fill=tk.X, padx=6)
-            tk.Label(row, text=name, font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_PRIMARY, bg=COLOR_PANEL_BG).pack(anchor=tk.W)
-            meta = tk.Label(row, text=f"Temp: {temp}  |  {status}", font=("Consolas", 8), fg=COLOR_GREEN, bg=COLOR_PANEL_BG)
-            meta.pack(anchor=tk.W)
-            self.diag_labels.append(meta)
+        # Populate Modules
+        self._build_left_modules()
+        self._build_center_slam_module()
+        self._build_right_modules()
+        self._build_bottom_modules()
 
-        # ----------------------------------------------------------------------
-        # COLUMN 2: 2D Robotic SLAM Canvas (Highlighted Header)
-        # ----------------------------------------------------------------------
-        card_slam, body_slam = self._create_tactical_card(
-            main_container, title="2D Robotic SLAM Occupancy Grid Map", accent_color=COLOR_ORANGE, right_badge="RVIZ / 1m GRID"
-        )
-        card_slam.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+    # --------------------------------------------------------------------------
+    # 3. LEFT COLUMN: COMPASS & HARDWARE HEALTH
+    # --------------------------------------------------------------------------
+    def _build_left_modules(self):
+        # 3A. 360° Heading Gauge Card
+        self.card_compass = self._create_card(self.left_col, "360° HEADING GAUGE")
+        self.card_compass.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
 
-        self.slam_canvas = tk.Canvas(body_slam, bg=COLOR_CANVAS_BLACK, highlightthickness=0)
-        self.slam_canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-        self.slam_canvas.bind("<Configure>", lambda e: self._render_slam_canvas())
+        self.compass_canvas = tk.Canvas(self.card_compass, bg=COLOR_PANEL_BG, height=175,
+                                        highlightthickness=0, bd=0)
+        self.compass_canvas.pack(fill=tk.X, padx=4, pady=2)
 
-        # ----------------------------------------------------------------------
-        # COLUMN 3: Right Sidebar (IP Camera & Survivor Table - Highlighted Tabs)
-        # ----------------------------------------------------------------------
-        col3 = tk.Frame(main_container, bg=COLOR_BG_ROOT, width=380)
-        col3.pack(side=tk.RIGHT, fill=tk.Y)
-        col3.pack_propagate(False)
+        # Pitch / Roll / Yaw Numbers
+        tele_box = tk.Frame(self.card_compass, bg=COLOR_PANEL_BG)
+        tele_box.pack(fill=tk.X, padx=8, pady=(0, 8))
 
-        # 1. IP CAMERA CARD (Highlighted Header)
-        card_cam, body_cam = self._create_tactical_card(
-            col3, title="IP Camera Live Feed (30 FPS)", accent_color=COLOR_RED, right_badge="1280x720 OSD"
-        )
-        card_cam.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        p_frame = tk.Frame(tele_box, bg=COLOR_PANEL_BG)
+        p_frame.pack(side=tk.LEFT, expand=True)
+        tk.Label(p_frame, text="Pitch", font=("Consolas", 7), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG).pack()
+        self.lbl_pitch = tk.Label(p_frame, text="+1.8°", font=("Consolas", 10, "bold"), fg=COLOR_TEXT_PRIMARY, bg=COLOR_PANEL_BG)
+        self.lbl_pitch.pack()
 
-        self.cam_canvas = tk.Canvas(body_cam, width=360, height=185, bg="#05070C", highlightthickness=0)
-        self.cam_canvas.pack(padx=2, pady=2)
-        self._render_camera_hud()
+        r_frame = tk.Frame(tele_box, bg=COLOR_PANEL_BG)
+        r_frame.pack(side=tk.LEFT, expand=True)
+        tk.Label(r_frame, text="Roll", font=("Consolas", 7), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG).pack()
+        self.lbl_roll = tk.Label(r_frame, text="-0.4°", font=("Consolas", 10, "bold"), fg=COLOR_TEXT_PRIMARY, bg=COLOR_PANEL_BG)
+        self.lbl_roll.pack()
 
-        # 2. SURVIVOR LOCALIZATION TABLE (Highlighted Header)
-        card_surv, body_surv = self._create_tactical_card(
-            col3, title="Survivor Localization Table", accent_color=COLOR_ORANGE, right_badge="6 TARGETS"
-        )
-        card_surv.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        y_frame = tk.Frame(tele_box, bg=COLOR_PANEL_BG)
+        y_frame.pack(side=tk.LEFT, expand=True)
+        tk.Label(y_frame, text="Yaw", font=("Consolas", 7), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG).pack()
+        self.lbl_yaw = tk.Label(y_frame, text="198°", font=("Consolas", 10, "bold"), fg=COLOR_CYAN, bg=COLOR_PANEL_BG)
+        self.lbl_yaw.pack()
+
+        # 3B. 4-System Hardware Health Matrix Card
+        self.card_health = self._create_card(self.left_col, "4-SYSTEM HARDWARE HEALTH MATRIX")
+        self.card_health.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        tbl = tk.Frame(self.card_health, bg=COLOR_PANEL_BG)
+        tbl.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
 
         # Table Header
-        th = tk.Frame(body_surv, bg="#131C30", pady=3)
-        th.pack(fill=tk.X, padx=2, pady=(2, 0))
-        tk.Label(th, text="ID", width=4, font=("Consolas", 8, "bold"), fg=COLOR_CYAN, bg="#131C30").pack(side=tk.LEFT)
-        tk.Label(th, text="STATUS", width=11, font=("Consolas", 8, "bold"), fg=COLOR_CYAN, bg="#131C30").pack(side=tk.LEFT)
-        tk.Label(th, text="GRID COORD", width=12, font=("Consolas", 8, "bold"), fg=COLOR_CYAN, bg="#131C30").pack(side=tk.LEFT)
-        tk.Label(th, text="CONF %", width=8, font=("Consolas", 8, "bold"), fg=COLOR_CYAN, bg="#131C30").pack(side=tk.LEFT)
+        h_row = tk.Frame(tbl, bg=COLOR_PANEL_BG)
+        h_row.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(h_row, text="SYSTEM", font=("Consolas", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG).pack(side=tk.LEFT)
+        tk.Label(h_row, text="TEMPERATURE", font=("Consolas", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG).pack(side=tk.RIGHT)
 
-        # Table Rows
+        hw_items = [
+            ("MicoAir FC", "38°C", COLOR_GREEN),
+            ("Jetson Orin Nano", "51°C", COLOR_AMBER),
+            ("ESC Motors", "44°C", COLOR_GREEN),
+            ("Raspberry Pi 4", "46°C", COLOR_GREEN)
+        ]
+
+        for name, val, col in hw_items:
+            row = tk.Frame(tbl, bg=COLOR_PANEL_BG)
+            row.pack(fill=tk.X, pady=3)
+            tk.Label(row, text=name, font=("Segoe UI", 9), fg=COLOR_TEXT_PRIMARY, bg=COLOR_PANEL_BG).pack(side=tk.LEFT)
+            tk.Label(row, text=val, font=("Consolas", 9, "bold"), fg=col, bg=COLOR_PANEL_BG).pack(side=tk.RIGHT)
+
+    # --------------------------------------------------------------------------
+    # 4. CENTER: 2D ROBOTIC SLAM CANVAS MODULE
+    # --------------------------------------------------------------------------
+    def _build_center_slam_module(self):
+        self.card_slam = self._create_card(self.center_col, "2D ROBOTIC SLAM CANVAS")
+        self.card_slam.pack(fill=tk.BOTH, expand=True)
+
+        self.slam_canvas = tk.Canvas(
+            self.card_slam,
+            bg=COLOR_CANVAS_BLACK,
+            highlightthickness=0,
+            bd=0
+        )
+        self.slam_canvas.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+    # --------------------------------------------------------------------------
+    # 5. RIGHT COLUMN: IP CAMERA & SURVIVOR LOCALIZATION TABLE
+    # --------------------------------------------------------------------------
+    def _build_right_modules(self):
+        # 5A. IP Camera Card
+        self.card_cam = self._create_card(self.right_col, "IP CAMERA (30 FPS)")
+        self.card_cam.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+
+        self.cam_canvas = tk.Canvas(
+            self.card_cam,
+            bg=COLOR_CANVAS_BLACK,
+            height=162,
+            highlightthickness=0,
+            bd=0
+        )
+        self.cam_canvas.pack(fill=tk.X, padx=4, pady=4)
+
+        # 5B. Survivor Localization Table Card
+        self.card_survivors = self._create_card(self.right_col, "SURVIVOR LOCALIZATION TABLE (1/6 LOCATED)")
+        self.card_survivors.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        tbl = tk.Frame(self.card_survivors, bg=COLOR_PANEL_BG)
+        tbl.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
+
+        # Table Column Header
+        h_row = tk.Frame(tbl, bg=COLOR_PANEL_BG)
+        h_row.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(h_row, text="[ID]", font=("Consolas", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG, width=4, anchor="w").pack(side=tk.LEFT)
+        tk.Label(h_row, text="STATUS", font=("Consolas", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG, width=9, anchor="w").pack(side=tk.LEFT)
+        tk.Label(h_row, text="GRID COORD", font=("Consolas", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG, width=11, anchor="center").pack(side=tk.LEFT)
+        tk.Label(h_row, text="CONF%", font=("Consolas", 7, "bold"), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG, width=6, anchor="e").pack(side=tk.RIGHT)
+
         self.survivor_row_widgets = []
         for s in self.survivors:
-            rf = tk.Frame(body_surv, bg=COLOR_PANEL_BG, pady=4)
-            rf.pack(fill=tk.X, padx=2)
-            lbl_id = tk.Label(rf, text=s["id"], width=4, font=("Consolas", 8, "bold"), fg=COLOR_TEXT_PRIMARY, bg=COLOR_PANEL_BG)
+            row_bg = "#261304" if s["located"] else COLOR_PANEL_BG
+            row = tk.Frame(tbl, bg=row_bg, bd=1, relief=tk.SOLID if s["located"] else tk.FLAT)
+            row.pack(fill=tk.X, pady=2, ipady=1)
+
+            # Icon / ID
+            lbl_id = tk.Label(row, text=f"🛡 {s['id']}", font=("Consolas", 8, "bold"),
+                              fg=COLOR_ORANGE if s["located"] else COLOR_TEXT_SECONDARY, bg=row_bg, width=5, anchor="w")
             lbl_id.pack(side=tk.LEFT)
-            lbl_st = tk.Label(rf, text="SEARCHING", width=11, font=("Consolas", 8), fg=COLOR_AMBER, bg=COLOR_PANEL_BG)
-            lbl_st.pack(side=tk.LEFT)
-            lbl_gd = tk.Label(rf, text="--", width=12, font=("Consolas", 8, "bold"), fg=COLOR_TEXT_MUTED, bg=COLOR_PANEL_BG)
-            lbl_gd.pack(side=tk.LEFT)
-            lbl_cf = tk.Label(rf, text="0.0%", width=8, font=("Consolas", 8), fg=COLOR_TEXT_SECONDARY, bg=COLOR_PANEL_BG)
-            lbl_cf.pack(side=tk.LEFT)
-            self.survivor_row_widgets.append((lbl_st, lbl_gd, lbl_cf))
+
+            # Status
+            lbl_status = tk.Label(row, text=s["status"], font=("Consolas", 7, "bold"),
+                                  fg=COLOR_ORANGE if s["located"] else COLOR_TEXT_MUTED, bg=row_bg, width=10, anchor="w")
+            lbl_status.pack(side=tk.LEFT)
+
+            # Grid Coordinate
+            lbl_grid = tk.Label(row, text=s["grid"], font=("Consolas", 8, "bold"),
+                                fg=COLOR_ORANGE if s["located"] else COLOR_TEXT_MUTED, bg=row_bg, width=11, anchor="center")
+            lbl_grid.pack(side=tk.LEFT)
+
+            # Confidence
+            conf_str = f"{s['conf']:.1f}%" if s["located"] else "-"
+            lbl_conf = tk.Label(row, text=conf_str, font=("Consolas", 8, "bold"),
+                                fg=COLOR_GREEN if s["located"] else COLOR_TEXT_MUTED, bg=row_bg, width=6, anchor="e")
+            lbl_conf.pack(side=tk.RIGHT)
+
+            self.survivor_row_widgets.append((lbl_status, lbl_grid, lbl_conf, row))
 
     # --------------------------------------------------------------------------
-    # BOTTOM ACTION & LOGGING BAR (Highlighted Headers)
+    # 6. BOTTOM ROW: LOG + PROGRESS + ACTION BUTTONS
     # --------------------------------------------------------------------------
-    def _build_bottom_bar(self):
-        bottom = tk.Frame(self.root, bg=COLOR_BG_ROOT, height=140)
-        bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 6))
-        bottom.pack_propagate(False)
-
-        # 1. Mission Event Log Console (Highlighted Header)
-        card_log, body_log = self._create_tactical_card(
-            bottom, title="Mission Event Log", accent_color=COLOR_CYAN, right_badge="LIVE AUDIT"
-        )
+    def _build_bottom_modules(self):
+        # 6A. Mission Event Log (Left)
+        card_log = self._create_card(self.bottom_frame, "MISSION EVENT LOG")
         card_log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
-        self.log_text = tk.Text(body_log, bg="#050811", fg=COLOR_TEXT_SECONDARY, font=("Consolas", 8),
-                                bd=0, highlightthickness=0, wrap=tk.NONE)
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        self.log_text = tk.Text(card_log, bg="#070B16", fg=COLOR_TEXT_SECONDARY,
+                                font=("Consolas", 8), bd=0, highlightthickness=0, wrap=tk.WORD)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
 
-        # 2. Arena Exploration & Mission Progress Box (Highlighted Header)
-        card_prog, body_prog = self._create_tactical_card(
-            bottom, title="Arena Exploration & Mission Progress", accent_color=COLOR_CYAN, right_badge="ANALYTICS", width=360
-        )
-        card_prog.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
-        card_prog.pack_propagate(False)
+        initial_logs = [
+            "[15:56:01] System Initialized: MicoAir FC + Jetson Orin Nano Online",
+            "[15:56:02] LiDAR RPLiDAR A2 Active: 12.0 Hz Spin Rate (1440 pts/rev)",
+            "[15:56:03] SLAM Odometry: Frontier Exploration Active in Corridor Alpha",
+            "[15:56:08] [ALERT] Survivor T1 Identified at Grid [C-4] (Temp: 37.1°C)",
+            "[15:56:09] Discrete Geotag Registered: T1 -> Room Alpha [C-4] Locked"
+        ]
+        for l in initial_logs:
+            self.log_text.insert(tk.END, l + "\n")
+        self.log_text.see(tk.END)
 
-        self.prog_bar_canvas = tk.Canvas(body_prog, width=340, height=22, bg="#070C18", highlightthickness=0)
-        self.prog_bar_canvas.pack(padx=4, pady=(4, 2))
+        # 6B. Exploration Progress Card (Center)
+        card_prog = self._create_card(self.bottom_frame, "MISSION PROGRESS & ARENA EXPLORATION")
+        card_prog.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6), ipadx=10)
 
-        self.prog_stats_lbl = tk.Label(
-            body_prog,
-            text="ARENA EXPLORED: 12%  |  DISTANCE: 0.0m\nPHASE: CORRIDOR MAPPING  |  TARGETS: 0 / 6 FOUND",
-            font=("Consolas", 8, "bold"),
-            fg=COLOR_CYAN,
+        prog_inner = tk.Frame(card_prog, bg=COLOR_PANEL_BG)
+        prog_inner.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+
+        self.lbl_arena_pct = tk.Label(prog_inner, text="ARENA EXPLORED: 74%", font=("Consolas", 10, "bold"),
+                                      fg=COLOR_TEXT_PRIMARY, bg=COLOR_PANEL_BG, anchor="w")
+        self.lbl_arena_pct.pack(fill=tk.X, pady=(2, 4))
+
+        self.prog_canvas = tk.Canvas(prog_inner, bg="#0A1020", height=12, highlightthickness=0, bd=0)
+        self.prog_canvas.pack(fill=tk.X, pady=(0, 6))
+
+        self.lbl_stats = tk.Label(
+            prog_inner,
+            text="PHASE: CORRIDOR MAPPING\nDISTANCE: 42.8m  |  TARGETS: 1 / 6 FOUND",
+            font=("Consolas", 8),
+            fg=COLOR_TEXT_SECONDARY,
             bg=COLOR_PANEL_BG,
-            justify=tk.LEFT
+            justify=tk.LEFT,
+            anchor="w"
         )
-        self.prog_stats_lbl.pack(padx=4, pady=2, anchor=tk.W)
+        self.lbl_stats.pack(fill=tk.X)
 
-        # 3. Action Controls (Highlighted Header)
-        card_ctrl, body_ctrl = self._create_tactical_card(
-            bottom, title="Action Controls", accent_color=COLOR_ORANGE, right_badge="PILOT SAFETY", width=240
-        )
-        card_ctrl.pack(side=tk.RIGHT, fill=tk.Y)
-        card_ctrl.pack_propagate(False)
+        # 6C. Control Buttons (Right)
+        btn_frame = tk.Frame(self.bottom_frame, bg=COLOR_BG_ROOT, width=200)
+        btn_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        btn_frame.pack_propagate(False)
 
         self.btn_start = tk.Button(
-            body_ctrl,
+            btn_frame,
             text="START MISSION",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg="#059669",
             fg=COLOR_TEXT_PRIMARY,
             activebackground="#10B981",
-            relief=tk.FLAT,
+            activeforeground=COLOR_TEXT_PRIMARY,
+            bd=0,
+            cursor="hand2",
             command=self._start_mission
         )
-        self.btn_start.pack(fill=tk.X, padx=4, pady=(4, 2))
+        self.btn_start.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
 
         self.btn_abort = tk.Button(
-            body_ctrl,
+            btn_frame,
             text="EMERGENCY ABORT (RTL)",
             font=("Segoe UI", 9, "bold"),
             bg="#DC2626",
             fg=COLOR_TEXT_PRIMARY,
-            activebackground=COLOR_RED,
-            relief=tk.FLAT,
+            activebackground="#EF4444",
+            activeforeground=COLOR_TEXT_PRIMARY,
+            bd=0,
+            cursor="hand2",
             command=self._emergency_abort
         )
-        self.btn_abort.pack(fill=tk.X, padx=4, pady=2)
-
-        # Seed initial log messages
-        self._log_event("[BOOT] MicoAir H743v2 Stack Online (MAVLink v2.0)")
-        self._log_event("[BOOT] RPLiDAR C1 Scanner Synchronized @ 10.2 Hz")
-        self._log_event("[BOOT] Cartographer 2D Occupancy SLAM Pipeline Initialized")
-        self._log_event("[READY] Entry LZ Geotagged at Grid [G-2]. Awaiting Launch.")
+        self.btn_abort.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
     # --------------------------------------------------------------------------
-    # RENDERING METHODS (Compass, Camera HUD, SLAM Canvas)
+    # HELPER: CARD CREATOR
     # --------------------------------------------------------------------------
-    def _render_compass_dial(self):
-        w, h = 220, 140
-        cx, cy, r = w // 2, 65, 48
+    def _create_card(self, parent, title_text):
+        card = tk.Frame(parent, bg=COLOR_PANEL_BG, bd=1, relief=tk.SOLID,
+                        highlightbackground=COLOR_PANEL_BORDER, highlightthickness=1)
+
+        # Header Bar
+        hdr = tk.Frame(card, bg=COLOR_CARD_HEADER_BG, height=24)
+        hdr.pack(fill=tk.X, side=tk.TOP)
+        hdr.pack_propagate(False)
+
+        # Neon Accent Bar
+        accent = tk.Frame(hdr, bg=COLOR_CYAN, width=3)
+        accent.pack(side=tk.LEFT, fill=tk.Y)
+
+        lbl = tk.Label(hdr, text=f" {title_text}", font=("Consolas", 8, "bold"),
+                       fg=COLOR_TEXT_PRIMARY, bg=COLOR_CARD_HEADER_BG)
+        lbl.pack(side=tk.LEFT, padx=4)
+
+        return card
+
+    # --------------------------------------------------------------------------
+    # RENDERING ENGINES
+    # --------------------------------------------------------------------------
+    def _render_compass(self):
         self.compass_canvas.delete("all")
+        w = self.compass_canvas.winfo_width()
+        h = self.compass_canvas.winfo_height()
+        if w < 20 or h < 20:
+            return
 
-        self.compass_canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#1E2A44", width=2)
-        self.compass_canvas.create_oval(cx - r + 8, cy - r + 8, cx + r - 8, cy + r - 8, outline="#141E34", width=1)
+        cx = w / 2.0
+        cy = h / 2.0
+        r = min(cx, cy) - 10
 
-        cardinals = [("N", 0), ("E", 90), ("S", 180), ("W", 270)]
-        for text, deg in cardinals:
-            rad = math.radians(deg - self.yaw)
-            tx = cx + (r - 14) * math.sin(rad)
-            ty = cy - (r - 14) * math.cos(rad)
-            col = COLOR_ORANGE if text == "N" else COLOR_TEXT_SECONDARY
-            self.compass_canvas.create_text(tx, ty, text=text, font=("Consolas", 8, "bold"), fill=col)
+        # Outer Dials
+        self.compass_canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#1E2A42", width=3)
+        self.compass_canvas.create_oval(cx - r + 8, cy - r + 8, cx + r - 8, cy + r - 8, outline="#00354A", width=1)
 
-        rad = math.radians(0)
-        nx = cx + (r - 8) * math.sin(rad)
-        ny = cy - (r - 8) * math.cos(rad)
-        self.compass_canvas.create_line(cx, cy, nx, ny, fill=COLOR_ORANGE, width=3, arrow=tk.LAST)
-        self.compass_canvas.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill=COLOR_TEXT_PRIMARY, outline="")
+        # Tick marks
+        for deg in range(0, 360, 30):
+            rad = math.radians(deg)
+            x1 = cx + (r - 4) * math.sin(rad)
+            y1 = cy - (r - 4) * math.cos(rad)
+            x2 = cx + (r - 12) * math.sin(rad)
+            y2 = cy - (r - 12) * math.cos(rad)
+            col = COLOR_RED if deg == 0 else "#334155"
+            self.compass_canvas.create_line(x1, y1, x2, y2, fill=col, width=2 if deg % 90 == 0 else 1)
 
-        self.compass_canvas.create_text(cx, cy + 52, text=f"{int(self.yaw)}° S", font=("Segoe UI", 11, "bold"), fill=COLOR_TEXT_PRIMARY)
+        # North marker
+        self.compass_canvas.create_text(cx, cy - r + 20, text="N", font=("Consolas", 9, "bold"), fill=COLOR_RED)
+        self.compass_canvas.create_text(cx + r - 20, cy, text="E", font=("Consolas", 8, "bold"), fill=COLOR_TEXT_SECONDARY)
+        self.compass_canvas.create_text(cx, cy + r - 20, text="S", font=("Consolas", 8, "bold"), fill=COLOR_TEXT_SECONDARY)
+        self.compass_canvas.create_text(cx - r + 20, cy, text="W", font=("Consolas", 8, "bold"), fill=COLOR_TEXT_SECONDARY)
 
-    def _render_camera_hud(self):
-        w, h = 360, 185
+        # Orange Needle pointing to current Yaw
+        yaw_rad = math.radians(self.yaw)
+        nx = cx + (r - 24) * math.sin(yaw_rad)
+        ny = cy - (r - 24) * math.cos(yaw_rad)
+        bx = cx - (r - 24) * 0.4 * math.sin(yaw_rad)
+        by = cy + (r - 24) * 0.4 * math.cos(yaw_rad)
+        self.compass_canvas.create_line(bx, by, nx, ny, fill=COLOR_ORANGE, width=3, arrow=tk.LAST, arrowshape=(10, 12, 4))
+
+        # Center Dial Digital Readout
+        self.compass_canvas.create_oval(cx - 22, cy - 22, cx + 22, cy + 22, fill="#070B16", outline=COLOR_CYAN, width=1.5)
+        self.compass_canvas.create_text(cx, cy - 4, text=f"{int(self.yaw)}°", font=("Consolas", 10, "bold"), fill=COLOR_TEXT_PRIMARY)
+
+        # Direction text
+        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        d_idx = int((self.yaw + 22.5) % 360 // 45)
+        self.compass_canvas.create_text(cx, cy + 9, text=dirs[d_idx], font=("Consolas", 7, "bold"), fill=COLOR_CYAN)
+
+    def _render_ip_camera(self):
         self.cam_canvas.delete("all")
+        w = self.cam_canvas.winfo_width()
+        h = self.cam_canvas.winfo_height()
+        if w < 20 or h < 20:
+            return
 
-        self.cam_canvas.create_rectangle(0, 0, w, h, fill="#0F172A")
-        self.cam_canvas.create_polygon(0, 0, 70, 45, 70, 140, 0, h, fill="#162035", outline="#1F2E4C")
-        self.cam_canvas.create_polygon(w, 0, w - 70, 45, w - 70, 140, w, h, fill="#162035", outline="#1F2E4C")
-        self.cam_canvas.create_rectangle(70, 45, w - 70, 140, fill="#0D1322", outline="#223254")
+        # 1. Background Frame (Display cropped realistic surveillance image if loaded)
+        if self.cam_photo:
+            self.cam_canvas.create_image(0, 0, anchor="nw", image=self.cam_photo)
+        else:
+            # Fallback high-contrast corridor mockup
+            self.cam_canvas.create_rectangle(0, 0, w, h, fill="#121824", outline="")
+            self.cam_canvas.create_line(0, 0, w * 0.35, h * 0.45, fill="#1F293D")
+            self.cam_canvas.create_line(w, 0, w * 0.65, h * 0.45, fill="#1F293D")
+            self.cam_canvas.create_line(0, h, w * 0.35, h * 0.65, fill="#1F293D")
+            self.cam_canvas.create_line(w, h, w * 0.65, h * 0.65, fill="#1F293D")
 
-        self.cam_canvas.create_oval(14, 12, 22, 20, fill=COLOR_RED, outline="")
-        self.cam_canvas.create_text(42, 16, text="REC", font=("Consolas", 8, "bold"), fill=COLOR_TEXT_PRIMARY)
-        self.cam_canvas.create_text(w - 50, 16, text="30.0 FPS", font=("Consolas", 8), fill=COLOR_GREEN)
+            # Center target silhouette
+            cx, cy = w / 2.0, h / 2.0
+            self.cam_canvas.create_oval(cx - 10, cy - 25, cx + 10, cy - 5, fill="#334155", outline="")
+            self.cam_canvas.create_rectangle(cx - 16, cy - 5, cx + 16, cy + 30, fill="#334155", outline="")
 
-        for cx, cy in [(25, 30), (w - 25, 30), (25, h - 25), (w - 25, h - 25)]:
-            self.cam_canvas.create_line(cx - 5, cy, cx + 5, cy, fill="#334155")
-            self.cam_canvas.create_line(cx, cy - 5, cx, cy + 5, fill="#334155")
+        # 2. Dynamic Blinking REC Indicator
+        now = time.time()
+        if now - self.last_blink_time > 0.5:
+            self.rec_blink_state = not self.rec_blink_state
+            self.last_blink_time = now
 
-        if self.survivors_located_count > 0:
-            bx1, by1, bx2, by2 = 145, 55, 215, 150
-            self.cam_canvas.create_rectangle(bx1, by1, bx2, by2, outline=COLOR_ORANGE, width=2)
-            self.cam_canvas.create_rectangle(bx1, by1 - 16, bx1 + 130, by1, fill=COLOR_ORANGE, outline="")
-            self.cam_canvas.create_text(bx1 + 65, by1 - 8, text="SURVIVOR T1: 94.2%", font=("Consolas", 7, "bold"), fill=COLOR_TEXT_PRIMARY)
+        if self.rec_blink_state:
+            self.cam_canvas.create_oval(10, 10, 20, 20, fill=COLOR_RED, outline="")
+        self.cam_canvas.create_text(35, 15, text="REC", font=("Consolas", 8, "bold"), fill=COLOR_TEXT_PRIMARY)
 
+        # 3. Dynamic Live OSD Timestamp
         ts = time.strftime("%Y-%m-%d %H:%M:%S")
-        self.cam_canvas.create_text(85, h - 12, text=ts, font=("Consolas", 7), fill=COLOR_TEXT_SECONDARY)
-        self.cam_canvas.create_text(w - 70, h - 12, text="YOLOv8: ON", font=("Consolas", 7, "bold"), fill=COLOR_CYAN)
+        self.cam_canvas.create_text(w - 75, 15, text=ts, font=("Consolas", 7), fill=COLOR_TEXT_PRIMARY)
+
+        # 4. YOLO Target Reticle & Bounding Box Overlay
+        if self.survivors[0]["located"]:
+            # Highlight box over the person in corridor
+            bx1, by1, bx2, by2 = 145, 32, 210, 132
+            self.cam_canvas.create_rectangle(bx1, by1, bx2, by2, outline=COLOR_ORANGE, width=2)
+            self.cam_canvas.create_rectangle(bx1, by1 - 15, bx1 + 135, by1, fill=COLOR_ORANGE, outline="")
+            self.cam_canvas.create_text(bx1 + 67, by1 - 7, text="[SURVIVOR T1: 94.2% CONF]",
+                                        font=("Consolas", 7, "bold"), fill=COLOR_TEXT_PRIMARY)
+
+        # Bottom OSD status
+        self.cam_canvas.create_text(60, h - 12, text="[SOLOv8 T1: target]", font=("Consolas", 7), fill=COLOR_TEXT_SECONDARY)
+        self.cam_canvas.create_text(w - 45, h - 12, text="30.0 FPS", font=("Consolas", 7, "bold"), fill=COLOR_CYAN)
 
     def _render_slam_canvas(self):
         self.slam_canvas.delete("all")
@@ -516,141 +649,154 @@ class TeamEdithAirMouseGCS:
         if cw < 50 or ch < 50:
             return
 
-        cols_count = 15
-        rows_count = 15
-        gw = (cw - 50) / cols_count
-        gh = (ch - 40) / rows_count
+        # 1. Authentic High-Res Point Cloud Map (Floorplan with corridors and walls)
+        if self.slam_photo:
+            self.slam_canvas.create_image(0, 0, anchor="nw", image=self.slam_photo)
+        else:
+            # Fallback grid background
+            self.slam_canvas.create_rectangle(0, 0, cw, ch, fill=COLOR_CANVAS_BLACK)
+            for i in range(16):
+                x = (cw / 15.0) * i
+                self.slam_canvas.create_line(x, 0, x, ch, fill="#0F182A")
+                y = (ch / 15.0) * i
+                self.slam_canvas.create_line(0, y, cw, y, fill="#0F182A")
 
-        for i, col_name in enumerate(self.grid_cols):
-            x = 30 + i * gw
-            self.slam_canvas.create_line(x, 20, x, ch - 20, fill="#0F182A", width=1)
-            self.slam_canvas.create_text(x + gw / 2, ch - 10, text=col_name, font=("Consolas", 7), fill=COLOR_TEXT_MUTED)
+        # 2. Dynamic Trajectory Trail (Smooth Glowing Cyan Ribbon)
+        if len(self.trajectory_history) > 1:
+            flat_coords = []
+            for hx, hy in self.trajectory_history:
+                flat_coords.extend([hx, hy])
+            # Draw glow underlay
+            self.slam_canvas.create_line(flat_coords, fill="#00607A", width=5, smooth=True)
+            # Draw sharp core cyan line
+            self.slam_canvas.create_line(flat_coords, fill=COLOR_CYAN, width=2.5, smooth=True)
 
-        for j, row_idx in enumerate(self.grid_rows):
-            y = 20 + j * gh
-            self.slam_canvas.create_line(30, y, cw - 20, y, fill="#0F182A", width=1)
-            self.slam_canvas.create_text(16, y + gh / 2, text=str(row_idx), font=("Consolas", 7), fill=COLOR_TEXT_MUTED)
-
-        for px, py, pcol in self.point_cloud_dots:
-            sx = 30 + (px / 550.0) * (cw - 60)
-            sy = 20 + (py / 380.0) * (ch - 50)
-            self.slam_canvas.create_rectangle(sx, sy, sx + 1.5, sy + 1.5, fill=pcol, outline="")
-
-        dx = 30 + (self.drone_pos[0] / 550.0) * (cw - 60)
-        dy = 20 + (self.drone_pos[1] / 380.0) * (ch - 50)
-        cone_radius = 65
+        # 3. Rotating 360° LiDAR Laser Sweep Cone
+        dx, dy = self.drone_pos
+        cone_radius = 55
         sweep_rad = math.radians(self.lidar_angle)
-        span = math.radians(45)
+        span = math.radians(35)
         x1 = dx + cone_radius * math.cos(sweep_rad - span)
         y1 = dy + cone_radius * math.sin(sweep_rad - span)
         x2 = dx + cone_radius * math.cos(sweep_rad + span)
         y2 = dy + cone_radius * math.sin(sweep_rad + span)
         self.slam_canvas.create_polygon(dx, dy, x1, y1, x2, y2, fill="#00354A", outline="")
 
-        if len(self.trajectory_history) > 1:
-            coords = []
-            for hx, hy in self.trajectory_history:
-                tx = 30 + (hx / 550.0) * (cw - 60)
-                ty = 20 + (hy / 380.0) * (ch - 50)
-                coords.extend([tx, ty])
-            self.slam_canvas.create_line(coords, fill=COLOR_CYAN, width=2, smooth=True)
+        # 4. Entry/Exit LZ Marker
+        lz_x, lz_y = 205, 160
+        self.slam_canvas.create_oval(lz_x - 7, lz_y - 7, lz_x + 7, lz_y + 7, fill=COLOR_GREEN, outline=COLOR_TEXT_PRIMARY, width=1.5)
+        self.slam_canvas.create_text(lz_x - 38, lz_y, text="Entry/Exit LZ", font=("Consolas", 7, "bold"), fill=COLOR_GREEN)
 
-        lz_x = 30 + (250 / 550.0) * (cw - 60)
-        lz_y = 20 + (80 / 380.0) * (ch - 50)
-        self.slam_canvas.create_oval(lz_x - 6, lz_y - 6, lz_x + 6, lz_y + 6, fill=COLOR_GREEN, outline=COLOR_TEXT_PRIMARY, width=1)
-        self.slam_canvas.create_text(lz_x + 36, lz_y - 10, text="Entry/Exit LZ", font=("Consolas", 7, "bold"), fill=COLOR_GREEN)
-
+        # 5. Survivor T1 Marker (Glowing Orange Pin)
         if self.survivors[0]["located"]:
-            t1_x = 30 + (100 / 550.0) * (cw - 60)
-            t1_y = 20 + (180 / 380.0) * (ch - 50)
-            self.slam_canvas.create_oval(t1_x - 7, t1_y - 7, t1_x + 7, t1_y + 7, fill=COLOR_ORANGE, outline=COLOR_TEXT_PRIMARY, width=2)
-            self.slam_canvas.create_text(t1_x, t1_y - 12, text="T1 [C-4]", font=("Consolas", 7, "bold"), fill=COLOR_ORANGE)
+            t1_x, t1_y = 205, 160
+            self.slam_canvas.create_oval(t1_x - 8, t1_y - 8, t1_x + 8, t1_y + 8, fill=COLOR_ORANGE, outline=COLOR_TEXT_PRIMARY, width=2)
+            self.slam_canvas.create_text(t1_x + 22, t1_y - 10, text="T1 [C-4]", font=("Consolas", 8, "bold"), fill=COLOR_ORANGE)
 
-        drone_r = 8
-        self.slam_canvas.create_oval(dx - drone_r, dy - drone_r, dx + drone_r, dy + drone_r, fill=COLOR_ORANGE, outline=COLOR_TEXT_PRIMARY, width=1)
-        self.slam_canvas.create_line(dx - drone_r - 4, dy, dx + drone_r + 4, dy, fill=COLOR_TEXT_PRIMARY, width=2)
-        self.slam_canvas.create_line(dx, dy - drone_r - 4, dx, dy + drone_r + 4, fill=COLOR_TEXT_PRIMARY, width=2)
+        # 6. Drone Symbol (Tactical Quadcopter with Heading Vector)
+        # Heading Vector
+        h_rad = math.radians(self.yaw)
+        hx = dx + 18 * math.sin(h_rad)
+        hy = dy - 18 * math.cos(h_rad)
+        self.slam_canvas.create_line(dx, dy, hx, hy, fill=COLOR_CYAN, width=2, arrow=tk.LAST, arrowshape=(6, 8, 3))
+
+        # Quadcopter Halo & Core
+        self.slam_canvas.create_oval(dx - 10, dy - 10, dx + 10, dy + 10, outline=COLOR_ORANGE, width=1.5)
+        self.slam_canvas.create_oval(dx - 4, dy - 4, dx + 4, dy + 4, fill=COLOR_ORANGE, outline="")
+        self.slam_canvas.create_line(dx - 8, dy, dx + 8, dy, fill=COLOR_TEXT_PRIMARY, width=1.5)
+        self.slam_canvas.create_line(dx, dy - 8, dx, dy + 8, fill=COLOR_TEXT_PRIMARY, width=1.5)
+
+    def _render_progress_bar(self):
+        self.prog_canvas.delete("all")
+        pw = self.prog_canvas.winfo_width()
+        ph = self.prog_canvas.winfo_height()
+        if pw < 10 or ph < 4:
+            return
+
+        self.prog_canvas.create_rectangle(0, 0, pw, ph, fill="#0A1020", outline="#1E2A42")
+        fill_w = (self.exploration_percent / 100.0) * pw
+        self.prog_canvas.create_rectangle(0, 0, fill_w, ph, fill=COLOR_CYAN, outline="")
+
+        self.lbl_arena_pct.config(text=f"ARENA EXPLORED: {int(self.exploration_percent)}%")
+        self.lbl_stats.config(
+            text=f"PHASE: CORRIDOR MAPPING\nDISTANCE: {self.distance_traversed:.1f}m  |  TARGETS: {self.survivors_located_count} / 6 FOUND"
+        )
 
     # --------------------------------------------------------------------------
-    # SIMULATION TICK & STATE UPDATES
+    # PERIODIC SIMULATION ENGINE (60 FPS TICK)
     # --------------------------------------------------------------------------
     def _schedule_updates(self):
-        self._update_telemetry_tick()
-        self.root.after(50, self._schedule_updates)
+        self._update_simulation_tick()
+        self.root.after(33, self._schedule_updates)  # ~30 FPS UI refresh
 
-    def _update_telemetry_tick(self):
+    def _update_simulation_tick(self):
+        # 1. Update Mission Time
         if self.is_mission_active and self.start_time:
             self.elapsed_time = time.time() - self.start_time
             m = int(self.elapsed_time // 60)
             s = int(self.elapsed_time % 60)
             ms = int((self.elapsed_time * 10) % 10)
-            time_str = f"{m:02d}:{s:02d}.{ms:01d}"
-            self.header_telemetry.config(text=f"STATUS: ARMED  |  ALT: {self.altitude:.2f}m  |  MISSION TIME: 00:{time_str}")
+            self.lbl_telemetry_status.config(
+                text=f"STATUS: ARMED  |  ALT: {self.altitude:.1f}m  |  MISSION TIME: 00:{m:02d}:{s:02d}.{ms:01d}"
+            )
 
-        self.lidar_angle = (self.lidar_angle + 6.0) % 360.0
+        # 2. Spin LiDAR
+        self.lidar_angle = (self.lidar_angle + 8.0) % 360.0
 
+        # 3. Advance Drone Along Corridor Waypoints
         if self.is_mission_active:
-            self._advance_simulation_flight()
+            self._advance_corridor_flight()
 
+        # 4. Render UI Elements
+        self._render_compass()
+        self._render_ip_camera()
         self._render_slam_canvas()
-        self._render_compass_dial()
         self._render_progress_bar()
 
-    def _advance_simulation_flight(self):
-        speed = 1.2
-        self.distance_traversed += 0.06
-        self.exploration_percent = min(98.0, self.exploration_percent + 0.05)
+    def _advance_corridor_flight(self):
+        """Moves drone smoothly along predefined hallway centerline (100% collision-free)."""
+        p1 = self.corridor_waypoints[self.waypoint_index]
+        next_idx = (self.waypoint_index + 1) % len(self.corridor_waypoints)
+        p2 = self.corridor_waypoints[next_idx]
 
-        cx, cy = self.drone_pos
-        if cy < 220 and cx > 80:
-            self.drone_pos[0] -= speed * 0.8
-            self.drone_pos[1] += speed * 0.5
-            self.yaw = 225.0
-        elif cx <= 80 and cy < 310:
-            self.drone_pos[1] += speed
-            self.yaw = 180.0
-        elif cy >= 310 and cx < 400:
-            self.drone_pos[0] += speed
-            self.yaw = 90.0
-        else:
-            self.drone_pos[1] -= speed * 0.5
-            self.yaw = 340.0
+        # Interpolate between p1 and p2
+        step_speed = 0.035
+        self.waypoint_t += step_speed
 
+        if self.waypoint_t >= 1.0:
+            self.waypoint_t = 0.0
+            self.waypoint_index = next_idx
+            p1 = p2
+            next_idx = (self.waypoint_index + 1) % len(self.corridor_waypoints)
+            p2 = self.corridor_waypoints[next_idx]
+
+        # Calculate current (x, y)
+        cur_x = p1[0] + (p2[0] - p1[0]) * self.waypoint_t
+        cur_y = p1[1] + (p2[1] - p1[1]) * self.waypoint_t
+        self.drone_pos = [cur_x, cur_y]
+
+        # Calculate heading angle (Yaw) dynamically from movement vector
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        heading_deg = (math.degrees(math.atan2(dx, -dy))) % 360.0
+        self.yaw = heading_deg
+        self.lbl_yaw.config(text=f"{int(self.yaw)}°")
+
+        # Record Trajectory History
         self.trajectory_history.append(list(self.drone_pos))
-        if len(self.trajectory_history) > 300:
+        if len(self.trajectory_history) > 400:
             self.trajectory_history.pop(0)
 
-        if self.elapsed_time >= 6.0 and not self.survivors[0]["located"]:
-            self.survivors[0]["located"] = True
-            self.survivors[0]["status"] = "LOCATED"
-            self.survivors[0]["grid"] = "Grid [C-4]"
-            self.survivors[0]["conf"] = 94.2
-            self.survivors_located_count = 1
+        # Update Exploration Metrics
+        self.distance_traversed += 0.05
+        self.exploration_percent = min(96.0, self.exploration_percent + 0.02)
 
-            lbl_st, lbl_gd, lbl_cf = self.survivor_row_widgets[0]
-            lbl_st.config(text="LOCATED", fg=COLOR_ORANGE)
-            lbl_gd.config(text="Grid [C-4]", fg=COLOR_ORANGE)
-            lbl_cf.config(text="94.2%", fg=COLOR_GREEN)
-
-            self._log_event("[ALERT] Survivor T1 Identified at Grid [C-4] (Temp: 37.1°C)")
-            self._log_event("[SLAM] Discrete Geotag Registered: T1 -> Room Alpha [C-4]")
-            AudioAlertSystem.play_sonar_chirp()
-
-    def _render_progress_bar(self):
-        pw = 340
-        ph = 22
-        self.prog_bar_canvas.delete("all")
-        self.prog_bar_canvas.create_rectangle(0, 0, pw, ph, fill="#0F172A", outline="#1E2A42")
-        fill_w = (self.exploration_percent / 100.0) * pw
-        self.prog_bar_canvas.create_rectangle(0, 0, fill_w, ph, fill=COLOR_CYAN, outline="")
-        self.prog_bar_canvas.create_text(pw // 2, ph // 2, text=f"{int(self.exploration_percent)}% EXPLORED",
-                                         font=("Consolas", 8, "bold"), fill=COLOR_TEXT_PRIMARY)
-
-        phase_txt = "CORRIDOR MAPPING" if self.survivors_located_count < 6 else "RAPID EXIT RUN"
-        self.prog_stats_lbl.config(
-            text=f"ARENA EXPLORED: {int(self.exploration_percent)}%  |  DISTANCE: {self.distance_traversed:.1f}m\n"
-                 f"PHASE: {phase_txt}  |  TARGETS: {self.survivors_located_count} / 6 FOUND"
-        )
+        # Trigger Survivor T1 Acquisition if passing near T1 and not yet alerted
+        if self.waypoint_index == 14 and self.elapsed_time >= 3.0:
+            if not self.survivors[0]["located"]:
+                self.survivors[0]["located"] = True
+                self._log_event("[ALERT] Survivor T1 Acquired at Grid [C-4] (YOLO Conf: 94.2%)")
+                AudioAlertSystem.play_sonar_chirp()
 
     def _log_event(self, message):
         ts = time.strftime("%H:%M:%S")
@@ -658,20 +804,21 @@ class TeamEdithAirMouseGCS:
         self.log_text.see(tk.END)
 
     # --------------------------------------------------------------------------
-    # ACTION CONTROLS
+    # PILOT ACTIONS
     # --------------------------------------------------------------------------
     def _start_mission(self):
         if not self.is_mission_active:
             self.is_mission_active = True
             self.start_time = time.time()
-            self._log_event("[MISSION] Autonomous Takeoff Initialized -> Target Cruise Altitude: 1.20m")
+            self._log_event("[MISSION] Autonomous Takeoff Initialized -> Target Altitude: 1.2m")
             self._log_event("[NAV] Traversed Corridor Exploration Active (Frontier SLAM)")
             self.btn_start.config(text="MISSION ACTIVE", bg=COLOR_AMBER)
+            AudioAlertSystem.play_sonar_chirp()
 
     def _emergency_abort(self):
         self.is_mission_active = False
         self._log_event("[ALERT] EMERGENCY ABORT (RTL) TRIGGERED BY PILOT!")
-        self._log_event("[RTL] Safe Return-to-Launch Initiated Along Traversed Path -> Heading to Entry LZ")
+        self._log_event("[RTL] Safe Return-to-Launch Initiated along Hallway Path -> Returning to LZ")
         self.btn_start.config(text="START MISSION", bg="#059669")
         AudioAlertSystem.play_sonar_chirp()
 
