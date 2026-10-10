@@ -1,0 +1,6 @@
+# TEAM EDITH - AirMouse GCS Dependencies
+# Native Python 3.10+ standard libraries are primarily utilized for zero-lag 60 FPS rendering.
+# Optional live hardware bridge libraries:
+# opencv-python>=4.8.0
+# numpy>=1.24.0
+# pymavlink>=2.4.0
