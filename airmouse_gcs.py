@@ -190,7 +190,13 @@ class TeamEdithAirMouseGCS:
                     print(f"Error loading {filename}: {e}")
             return None
 
-        self.img_logo = _get_img("team_edith_emblem.png")
+        self.img_logo = _get_img("team_edith_logo_header.png")
+        if self.img_logo:
+            try:
+                self.root.iconphoto(True, self.img_logo)
+            except Exception:
+                pass
+
         self.img_wifi = _get_img("top_wifi_widget.png")
         self.img_battery = _get_img("top_battery_widget.png")
         self.cam_photo = _get_img("cam_feed.png")
