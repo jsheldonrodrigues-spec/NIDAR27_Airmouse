@@ -1,0 +1,20 @@
+================================================================================
+TEAM EDITH - AIRMOUSE GROUND CONTROL STATION (GCS) OFFICIAL MISSION REPORT
+NIDAR AirMouse Challenge - Problem Statement 2 (GPS-Denied Indoor Search)
+================================================================================
+
+Timestamp: 2026-10-15 14:27:12
+Mission Duration: 41.3 seconds
+Total Traversed Distance: 45.0 meters
+Arena Exploration: 26.3%
+Total Targets Found: 6 / 6
+Early Exit Bonus Eligible: YES
+
+SURVIVOR LOCALIZATION TABLE (1m x 1m METRIC ARENA GEOTAGS):
+Target_ID,Status,Grid_Coordinate,YOLOv8_Confidence_Percent
+T1,LOCATED,Grid [C-4],95.7
+T2,LOCATED,Grid [G-2],97.4
+T3,LOCATED,Grid [K-7],97.0
+T4,LOCATED,Grid [M-12],95.9
+T5,LOCATED,Grid [D-14],97.4
+T6,LOCATED,Grid [J-11],97.7
